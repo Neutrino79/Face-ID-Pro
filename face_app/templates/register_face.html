@@ -1,35 +1,31 @@
 {% extends 'base.html' %}
-
-{% block title %}Register Face{% endblock %}
-
+{% block title %}Register Face - FaceID Pro{% endblock %}
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-8">
-        <div class="card">
-            <div class="card-header bg-primary text-white">
-                <h2 class="mb-0"><i class="fas fa-user-plus"></i> Register New Face</h2>
-            </div>
-            <div class="card-body">
-                <form id="registerForm">
-                    {% csrf_token %}
-                    <div class="mb-3">
-                        <label for="name" class="form-label">Name</label>
-                        <input type="text" class="form-control" id="name" name="name" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Face Image</label>
-                        <div class="text-center">
-                            <video id="video" width="400" height="300" class="img-fluid mb-3" autoplay></video>
-                            <canvas id="canvas" style="display:none;"></canvas>
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <h2 class="display-4 mb-5 text-center">Register New Face</h2>
+            <div class="card">
+                <div class="card-body">
+                    <form id="registerForm">
+                        {% csrf_token %}
+                        <div class="mb-4">
+                            <label for="name" class="form-label">Name</label>
+                            <input type="text" class="form-control form-control-lg" id="name" name="name" required>
                         </div>
-                    </div>
-                    <div class="d-grid">
-                        <button type="button" id="captureBtn" class="btn btn-primary btn-lg">
-                            <i class="fas fa-camera"></i> Capture and Register
-                        </button>
-                    </div>
-                </form>
-                <div id="result" class="mt-3 alert" style="display:none;"></div>
+                        <div class="mb-4">
+                            <label class="form-label">Face Image</label>
+                            <div class="text-center">
+                                <video id="video" width="40%" height="auto" class="rounded mb-3" autoplay></video>
+                                <canvas id="canvas" style="display:none;"></canvas>
+                            </div>
+                        </div>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary btn-lg">Capture and Register</button>
+                        </div>
+                    </form>
+                    <div id="result" class="mt-4 alert" style="display:none;"></div>
+                </div>
             </div>
         </div>
     </div>

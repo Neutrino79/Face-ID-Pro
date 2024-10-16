@@ -1,31 +1,33 @@
 {% extends 'base.html' %}
-
-{% block title %}Home{% endblock %}
-
+{% block title %}Home - FaceID Pro{% endblock %}
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-8 text-center">
-        <h1 class="display-4 mb-4">Welcome to FaceID Pro</h1>
-        <p class="lead mb-5">Secure and accurate face detection for your applications.</p>
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <h1 class="display-2 mb-5 text-center">Face<span style="color: var(--primary-color);">ID</span> Pro</h1>
+            <p class="lead text-center mb-5">Next-generation facial recognition at your fingertips</p>
 
-        <div class="row">
-            <div class="col-md-6 mb-4">
-                <div class="card h-100">
-                    <div class="card-body">
-                        <h5 class="card-title"><i class="fas fa-user-plus fa-2x mb-3 text-primary"></i></h5>
-                        <h6 class="card-subtitle mb-2 text-muted">Register Face</h6>
-                        <p class="card-text">Add a new face to the database for future recognition.</p>
-                        <a href="{% url 'register_face' %}" class="btn btn-primary">Get Started</a>
+            <div class="row">
+                <div class="col-md-6 mb-4">
+                    <div class="card h-100">
+                        <div class="card-body d-flex flex-column justify-content-between">
+                            <div>
+                                <h3 class="card-title mb-4">Register Face</h3>
+                                <p class="card-text">Add new faces to our secure database for seamless recognition.</p>
+                            </div>
+                            <a href="{% url 'register_face' %}" class="btn btn-primary btn-lg mt-3">Get Started</a>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div class="col-md-6 mb-4">
-                <div class="card h-100">
-                    <div class="card-body">
-                        <h5 class="card-title"><i class="fas fa-camera fa-2x mb-3 text-success"></i></h5>
-                        <h6 class="card-subtitle mb-2 text-muted">Test Face Detection</h6>
-                        <p class="card-text">Verify a face against the registered database.</p>
-                        <a href="{% url 'test_face' %}" class="btn btn-success">Try Now</a>
+                <div class="col-md-6 mb-4">
+                    <div class="card h-100">
+                        <div class="card-body d-flex flex-column justify-content-between">
+                            <div>
+                                <h3 class="card-title mb-4">Test Face Detection</h3>
+                                <p class="card-text">Instantly verify faces against our advanced recognition system.</p>
+                            </div>
+                            <a href="{% url 'test_face' %}" class="btn btn-success btn-lg mt-3">Start Testing</a>
+                        </div>
                     </div>
                 </div>
             </div>
