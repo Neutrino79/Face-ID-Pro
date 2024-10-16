@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 text-center">
+        <h1 class="display-4 mb-4">Welcome to FaceID Pro</h1>
+        <p class="lead mb-5">Secure and accurate face detection for your applications.</p>
+
+        <div class="row">
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="fas fa-user-plus fa-2x mb-3 text-primary"></i></h5>
+                        <h6 class="card-subtitle mb-2 text-muted">Register Face</h6>
+                        <p class="card-text">Add a new face to the database for future recognition.</p>
+                        <a href="{% url 'register_face' %}" class="btn btn-primary">Get Started</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="fas fa-camera fa-2x mb-3 text-success"></i></h5>
+                        <h6 class="card-subtitle mb-2 text-muted">Test Face Detection</h6>
+                        <p class="card-text">Verify a face against the registered database.</p>
+                        <a href="{% url 'test_face' %}" class="btn btn-success">Try Now</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

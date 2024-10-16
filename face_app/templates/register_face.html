@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+
+{% block title %}Register Face{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h2 class="mb-0"><i class="fas fa-user-plus"></i> Register New Face</h2>
+            </div>
+            <div class="card-body">
+                <form id="registerForm">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Name</label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Face Image</label>
+                        <div class="text-center">
+                            <video id="video" width="400" height="300" class="img-fluid mb-3" autoplay></video>
+                            <canvas id="canvas" style="display:none;"></canvas>
+                        </div>
+                    </div>
+                    <div class="d-grid">
+                        <button type="button" id="captureBtn" class="btn btn-primary btn-lg">
+                            <i class="fas fa-camera"></i> Capture and Register
+                        </button>
+                    </div>
+                </form>
+                <div id="result" class="mt-3 alert" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const captureBtn = document.getElementById('captureBtn');
+    const resultDiv = document.getElementById('result');
+
+    // Start video stream
+    navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => {
+            video.srcObject = stream;
+        })
+        .catch(err => {
+            console.error("Error accessing the camera", err);
+            alert("Unable to access the camera. Please ensure you have given permission and try again.");
+        });
+
+    captureBtn.addEventListener('click', () => {
+        const context = canvas.getContext('2d');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        const imageDataUrl = canvas.toDataURL('image/jpeg');
+
+        // Send data to server
+        fetch('{% url "register_face" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: new URLSearchParams({
+                'name': document.getElementById('name').value,
+                'image': imageDataUrl
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                resultDiv.className = 'mt-3 alert alert-success';
+                resultDiv.textContent = 'Face registered successfully!';
+            } else {
+                resultDiv.className = 'mt-3 alert alert-danger';
+                resultDiv.textContent = 'Error: ' + data.error;
+            }
+            resultDiv.style.display = 'block';
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            resultDiv.className = 'mt-3 alert alert-danger';
+            resultDiv.textContent = 'An error occurred. Please try again.';
+            resultDiv.style.display = 'block';
+        });
+    });
+</script>
+{% endblock %}
