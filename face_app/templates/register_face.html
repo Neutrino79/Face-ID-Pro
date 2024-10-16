@@ -21,7 +21,7 @@
                             </div>
                         </div>
                         <div class="d-grid">
-                            <button type="submit" class="btn btn-primary btn-lg">Capture and Register</button>
+                            <button id="captureBtn" type="submit" class="btn btn-primary btn-lg">Capture and Register</button>
                         </div>
                     </form>
                     <div id="result" class="mt-4 alert" style="display:none;"></div>
@@ -35,57 +35,61 @@
 {% block extra_js %}
 <script>
     const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const captureBtn = document.getElementById('captureBtn');
-    const resultDiv = document.getElementById('result');
+const canvas = document.getElementById('canvas');
+const captureBtn = document.getElementById('captureBtn');
+const resultDiv = document.getElementById('result');
 
-    // Start video stream
-    navigator.mediaDevices.getUserMedia({ video: true })
-        .then(stream => {
-            video.srcObject = stream;
-        })
-        .catch(err => {
-            console.error("Error accessing the camera", err);
-            alert("Unable to access the camera. Please ensure you have given permission and try again.");
-        });
-
-    captureBtn.addEventListener('click', () => {
-        const context = canvas.getContext('2d');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        const imageDataUrl = canvas.toDataURL('image/jpeg');
-
-        // Send data to server
-        fetch('{% url "register_face" %}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-            },
-            body: new URLSearchParams({
-                'name': document.getElementById('name').value,
-                'image': imageDataUrl
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                resultDiv.className = 'mt-3 alert alert-success';
-                resultDiv.textContent = 'Face registered successfully!';
-            } else {
-                resultDiv.className = 'mt-3 alert alert-danger';
-                resultDiv.textContent = 'Error: ' + data.error;
-            }
-            resultDiv.style.display = 'block';
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            resultDiv.className = 'mt-3 alert alert-danger';
-            resultDiv.textContent = 'An error occurred. Please try again.';
-            resultDiv.style.display = 'block';
-        });
+// Start video stream
+navigator.mediaDevices.getUserMedia({ video: true })
+    .then(stream => {
+        video.srcObject = stream;
+    })
+    .catch(err => {
+        console.error("Error accessing the camera", err);
+        alert("Unable to access the camera. Please ensure you have given permission and try again.");
     });
+
+// Prevent form submission and handle the process using AJAX
+document.getElementById('registerForm').addEventListener('submit', function (event) {
+    event.preventDefault();  // Prevent form from submitting the traditional way
+
+    const context = canvas.getContext('2d');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const imageDataUrl = canvas.toDataURL('image/jpeg');
+
+    // Send data to the server
+    fetch('{% url "register_face" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: new URLSearchParams({
+            'name': document.getElementById('name').value,
+            'image': imageDataUrl
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            resultDiv.className = 'mt-3 alert alert-success';
+            resultDiv.textContent = 'Face registered successfully!';
+        } else {
+            resultDiv.className = 'mt-3 alert alert-danger';
+            resultDiv.textContent = 'Error: ' + data.error;
+        }
+        resultDiv.style.display = 'block';
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        resultDiv.className = 'mt-3 alert alert-danger';
+        resultDiv.textContent = 'An error occurred. Please try again.';
+        resultDiv.style.display = 'block';
+    });
+});
+
 </script>
 {% endblock %}
