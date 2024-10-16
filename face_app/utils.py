@@ -1,5 +1,7 @@
 import face_recognition
 import cv2
+import numpy as np
+
 
 def detect_and_encode_face(image, use_cnn=False):
     """
@@ -23,6 +25,7 @@ def detect_and_encode_face(image, use_cnn=False):
     else:
         return False, None
 
+
 def is_blurry(image, threshold=100.0):
     """
     Detect if an image is blurry using the Laplacian variance method.
@@ -31,6 +34,29 @@ def is_blurry(image, threshold=100.0):
     gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     laplacian_var = cv2.Laplacian(gray_image, cv2.CV_64F).var()
     return laplacian_var < threshold
+
+
+def align_face(image):
+    """
+    Aligns the face in the image using facial landmarks. Helps improve recognition accuracy.
+    """
+    # Detect the face landmarks
+    face_landmarks_list = face_recognition.face_landmarks(image)
+
+    if face_landmarks_list:
+        # Extract the chin and eye landmarks to calculate the face angle
+        chin = face_landmarks_list[0]['chin']
+        left_eye = face_landmarks_list[0]['left_eye']
+        right_eye = face_landmarks_list[0]['right_eye']
+
+        # Align based on the position of the eyes
+        # Implement your own logic here to rotate or align the face
+        # You can calculate the eye center and align the face horizontally
+        pass
+
+    # Return the aligned face (for now returning the same image)
+    return image
+
 
 def compare_faces(known_face_encodings, face_encoding):
     """

@@ -2,13 +2,13 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from .models import FaceProfile
 from .forms import FaceProfileForm
-from face_app.utils import detect_and_encode_face, compare_faces, is_blurry
+from face_app.utils import detect_and_encode_face, compare_faces, is_blurry, align_face
 import base64
 import numpy as np
 import cv2
 import face_recognition
 
-THRESHOLD = 0.55  # Fine-tuned threshold for matching accuracy
+THRESHOLD = 0.50  # Fine-tuned threshold for matching accuracy (lower threshold for stricter matching)
 
 def home(request):
     return render(request, 'home.html')
@@ -28,9 +28,13 @@ def register_face(request):
             image = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
 
             # Pre-check if the image is too blurry
-            #if is_blurry(image):
-            #    return JsonResponse({'success': False, 'error': 'Image is too blurry for face registration.'})
+            if is_blurry(image):
+                return JsonResponse({'success': False, 'error': 'Image is too blurry for face registration.'})
 
+            # Align the face for more accurate encoding
+            image = align_face(image)
+
+            # Detect and encode face using CNN model
             success, face_encoding = detect_and_encode_face(image, use_cnn=True)
             if success:
                 face_profile = FaceProfile(name=name)
@@ -56,14 +60,19 @@ def test_face(request):
             image = base64.b64decode(imgstr)
             image = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
 
-            ## Pre-check if the image is too blurry
-            #if is_blurry(image):
-            #    return JsonResponse({'success': False, 'error': 'Image is too blurry for recognition.'})
+            # Pre-check if the image is too blurry
+            if is_blurry(image):
+                return JsonResponse({'success': False, 'error': 'Image is too blurry for recognition.'})
 
+            # Align the face before encoding
+            image = align_face(image)
+
+            # Detect and encode face using CNN model
             success, face_encoding = detect_and_encode_face(image, use_cnn=True)
             if not success:
                 return JsonResponse({'success': False, 'error': 'No face detected in the image.'})
 
+            # Fetch known faces from the database
             known_faces = FaceProfile.objects.all()
             if not known_faces:
                 return JsonResponse({'success': False, 'error': 'No faces registered in the database.'})
