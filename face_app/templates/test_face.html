@@ -1,107 +1,90 @@
 {% extends 'base.html' %}
-{% block title %}Test Face Detection - FaceID Pro{% endblock %}
+{% block title %}Test Face Recognition - FaceID Pro{% endblock %}
 {% block content %}
+
 <div class="container-fluid">
     <div class="row justify-content-center">
         <div class="col-md-8">
-            <h2 class="display-4 mb-5 text-center">Test Face Detection</h2>
+            <h1 class="display-4 mb-5 text-center">Test Face Recognition</h1>
+
             <div class="card">
                 <div class="card-body">
-                    <div class="text-center mb-4">
-                        <video id="video" width="40%" height="auto" class="rounded mb-3" autoplay></video>
-                        <canvas id="canvas" style="display:none;"></canvas>
+                    <form id="testForm">
+                        {% csrf_token %}
+                        <div class="mb-4">
+                            <label class="form-label">Face Image</label>
+                            <div class="text-center">
+                                <video id="video" width="400" height="300" autoplay></video>
+                                <canvas id="canvas" width="400" height="300" style="display:none;"></canvas>
+                            </div>
+                        </div>
 
-                    </div>
-                    <div class="d-grid">
-                        <button id="captureButton" class="btn btn-success btn-lg">Capture and Test</button>
-                    </div>
+                        <div class="d-grid">
+                            <button type="button" id="captureBtn" class="btn btn-primary">Capture and Test</button>
+                        </div>
+                    </form>
+
                     <div id="result" class="mt-4 alert" style="display:none;"></div>
-                    <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
                 </div>
             </div>
         </div>
     </div>
 </div>
+
 {% endblock %}
 
 {% block extra_js %}
 <script>
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const captureBtn = document.getElementById('captureButton');
-    const resultDiv = document.getElementById('result');
+    let video = document.getElementById('video');
+    let canvas = document.getElementById('canvas');
+    let captureBtn = document.getElementById('captureBtn');
+    let result = document.getElementById('result');
 
-    // Start video stream
     navigator.mediaDevices.getUserMedia({ video: true })
         .then(stream => {
             video.srcObject = stream;
         })
         .catch(err => {
             console.error("Error accessing the camera", err);
-            showResult('error', "Unable to access the camera. Please ensure you have given permission and try again.");
         });
 
-    captureBtn.addEventListener('click', () => {
-        console.log('Capturing image...');
-        const context = canvas.getContext('2d');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    captureBtn.addEventListener('click', captureAndTest);
 
-        const imageDataUrl = canvas.toDataURL('image/jpeg');
+    function captureAndTest() {
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+        let imageData = canvas.toDataURL('image/jpeg');
 
-        // Show loading message
-        showResult('info', 'Processing... Please wait.');
-
-        // Send data to server
-        fetch('{% url "test_face" %}', {
+        fetch('/test_face/', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
             },
             body: new URLSearchParams({
-                'image': imageDataUrl
+                'image': imageData
             })
         })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
                 if (data.name) {
-                    showResult('success', `<strong>Match found!</strong><br>Name: ${data.name}<br>Confidence: ${data.confidence}`);
+                    result.textContent = `Face recognized: ${data.name} (Confidence: ${data.confidence})`;
+                    result.className = 'mt-4 alert alert-success';
                 } else {
-                    showResult('warning', data.message || 'No close match found in the database.');
+                    result.textContent = 'No matching face found.';
+                    result.className = 'mt-4 alert alert-warning';
                 }
             } else {
-                showResult('error', data.error || 'An unknown error occurred.');
+                result.textContent = data.error;
+                result.className = 'mt-4 alert alert-danger';
             }
+            result.style.display = 'block';
         })
         .catch(error => {
             console.error('Error:', error);
-            showResult('error', 'An error occurred while processing your request. Please try again.');
+            result.textContent = 'An error occurred. Please try again.';
+            result.className = 'mt-4 alert alert-danger';
+            result.style.display = 'block';
         });
-    });
-
-    function showResult(type, message) {
-        resultDiv.style.display = 'block';
-        resultDiv.innerHTML = message;
-
-        // Remove all existing classes and add new ones
-        resultDiv.className = 'mt-3 alert';
-        switch(type) {
-            case 'success':
-                resultDiv.classList.add('alert-success');
-                break;
-            case 'error':
-                resultDiv.classList.add('alert-danger');
-                break;
-            case 'warning':
-                resultDiv.classList.add('alert-warning');
-                break;
-            case 'info':
-                resultDiv.classList.add('alert-info');
-                break;
-        }
     }
 </script>
 {% endblock %}

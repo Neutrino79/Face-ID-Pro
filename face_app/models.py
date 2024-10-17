@@ -1,19 +1,18 @@
 from django.db import models
 import numpy as np
-import base64
-
+import json
 
 class FaceProfile(models.Model):
     name = models.CharField(max_length=100)
-    face_encoding = models.BinaryField()
+    face_encodings = models.TextField()  # Store multiple encodings as a JSON string
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def set_encodings(self, encodings):
+        self.face_encodings = json.dumps([enc.tolist() for enc in encodings])
+
+    def get_encodings(self):
+        return np.array(json.loads(self.face_encodings))
 
     def __str__(self):
         return self.name
-
-    def set_encoding(self, encoding):
-        self.face_encoding = base64.b64encode(encoding.tobytes())
-
-    def get_encoding(self):
-        decoded = base64.b64decode(self.face_encoding)
-        return np.frombuffer(decoded, dtype=np.float64)

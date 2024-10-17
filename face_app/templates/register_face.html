@@ -1,95 +1,169 @@
 {% extends 'base.html' %}
 {% block title %}Register Face - FaceID Pro{% endblock %}
 {% block content %}
+
 <div class="container-fluid">
     <div class="row justify-content-center">
         <div class="col-md-8">
-            <h2 class="display-4 mb-5 text-center">Register New Face</h2>
+            <h1 class="display-4 mb-5 text-center">Register New Face</h1>
+
             <div class="card">
                 <div class="card-body">
                     <form id="registerForm">
                         {% csrf_token %}
                         <div class="mb-4">
                             <label for="name" class="form-label">Name</label>
-                            <input type="text" class="form-control form-control-lg" id="name" name="name" required>
+                            <input type="text" class="form-control" id="name" name="name" required>
                         </div>
+
                         <div class="mb-4">
                             <label class="form-label">Face Image</label>
                             <div class="text-center">
-                                <video id="video" width="40%" height="auto" class="rounded mb-3" autoplay></video>
-                                <canvas id="canvas" style="display:none;"></canvas>
+                                <video id="video" width="400" height="300" autoplay></video>
+                                <canvas id="canvas" width="400" height="300" style="display:none;"></canvas>
                             </div>
                         </div>
+
+                        <div id="instructions" class="alert alert-info mb-4">
+                            Click "Start Capture" and follow the on-screen instructions.
+                        </div>
+
                         <div class="d-grid">
-                            <button id="captureBtn" type="submit" class="btn btn-primary btn-lg">Capture and Register</button>
+                            <button type="button" id="startBtn" class="btn btn-primary">Start Capture</button>
+                        </div>
+
+                        <div id="progress" class="mt-4" style="display:none;">
+                            <div class="progress">
+                                <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+                            </div>
                         </div>
                     </form>
+
                     <div id="result" class="mt-4 alert" style="display:none;"></div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
 {% endblock %}
 
 {% block extra_js %}
 <script>
-    const video = document.getElementById('video');
-const canvas = document.getElementById('canvas');
-const captureBtn = document.getElementById('captureBtn');
-const resultDiv = document.getElementById('result');
+    let video = document.getElementById('video');
+    let canvas = document.getElementById('canvas');
+    let startBtn = document.getElementById('startBtn');
+    let instructions = document.getElementById('instructions');
+    let progress = document.getElementById('progress');
+    let progressBar = document.getElementById('progressBar');
+    let result = document.getElementById('result');
+    let sampleCount = 0;
+    const requiredSamples = 5;
+    const poses = [
+        'Look straight at the camera',
+        'Turn your head slightly to the left',
+        'Turn your head slightly to the right',
+        'Tilt your head up slightly',
+        'Tilt your head down slightly'
+    ];
+    let isCapturing = false;
 
-// Start video stream
-navigator.mediaDevices.getUserMedia({ video: true })
-    .then(stream => {
-        video.srcObject = stream;
-    })
-    .catch(err => {
-        console.error("Error accessing the camera", err);
-        alert("Unable to access the camera. Please ensure you have given permission and try again.");
-    });
-
-// Prevent form submission and handle the process using AJAX
-document.getElementById('registerForm').addEventListener('submit', function (event) {
-    event.preventDefault();  // Prevent form from submitting the traditional way
-
-    const context = canvas.getContext('2d');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    const imageDataUrl = canvas.toDataURL('image/jpeg');
-
-    // Send data to the server
-    fetch('{% url "register_face" %}', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-        },
-        body: new URLSearchParams({
-            'name': document.getElementById('name').value,
-            'image': imageDataUrl
+    navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => {
+            video.srcObject = stream;
         })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            resultDiv.className = 'mt-3 alert alert-success';
-            resultDiv.textContent = 'Face registered successfully!';
-        } else {
-            resultDiv.className = 'mt-3 alert alert-danger';
-            resultDiv.textContent = 'Error: ' + data.error;
-        }
-        resultDiv.style.display = 'block';
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        resultDiv.className = 'mt-3 alert alert-danger';
-        resultDiv.textContent = 'An error occurred. Please try again.';
-        resultDiv.style.display = 'block';
-    });
-});
+        .catch(err => {
+            console.error("Error accessing the camera", err);
+        });
 
+    startBtn.addEventListener('click', startCapture);
+
+    function startCapture() {
+        if (isCapturing) return;
+        isCapturing = true;
+        startBtn.style.display = 'none';
+        progress.style.display = 'block';
+        sampleCount = 0;
+        captureLoop();
+    }
+
+    function captureLoop() {
+        if (sampleCount >= requiredSamples) {
+            finishRegistration();
+            return;
+        }
+
+        updateInstructions();
+        updateProgress();
+
+        // Wait for 3 seconds before capturing to give user time to adjust
+        setTimeout(() => {
+            captureAndSendImage();
+        }, 3000);
+    }
+
+    function updateInstructions() {
+        instructions.textContent = poses[sampleCount % poses.length];
+    }
+
+    function captureAndSendImage() {
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+        let imageData = canvas.toDataURL('image/jpeg');
+
+        fetch('/register_face/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            },
+            body: new URLSearchParams({
+                'name': document.getElementById('name').value,
+                'image': imageData,
+                'sample_count': sampleCount
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                sampleCount++;
+                if (data.complete) {
+                    finishRegistration();
+                } else {
+                    captureLoop();
+                }
+            } else {
+                showError(data.error);
+                // Retry the same pose
+                setTimeout(captureAndSendImage, 2000);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showError('An error occurred. Please try again.');
+            isCapturing = false;
+            startBtn.style.display = 'block';
+        });
+    }
+
+    function updateProgress() {
+        let percentage = (sampleCount / requiredSamples) * 100;
+        progressBar.style.width = percentage + '%';
+        progressBar.textContent = Math.round(percentage) + '%';
+    }
+
+    function finishRegistration() {
+        isCapturing = false;
+        video.srcObject.getTracks().forEach(track => track.stop());
+        instructions.style.display = 'none';
+        progress.style.display = 'none';
+        result.textContent = 'Face registration complete!';
+        result.className = 'mt-4 alert alert-success';
+        result.style.display = 'block';
+    }
+
+    function showError(message) {
+        result.textContent = message;
+        result.className = 'mt-4 alert alert-danger';
+        result.style.display = 'block';
+    }
 </script>
 {% endblock %}

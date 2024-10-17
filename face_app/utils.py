@@ -1,6 +1,7 @@
 import face_recognition
 import cv2
 import numpy as np
+from PIL import Image
 
 
 def detect_and_encode_face(image, use_cnn=False):
@@ -38,28 +39,43 @@ def is_blurry(image, threshold=100.0):
 
 def align_face(image):
     """
-    Aligns the face in the image using facial landmarks. Helps improve recognition accuracy.
+    Aligns the face in the image using facial landmarks.
     """
-    # Detect the face landmarks
     face_landmarks_list = face_recognition.face_landmarks(image)
 
     if face_landmarks_list:
-        # Extract the chin and eye landmarks to calculate the face angle
-        chin = face_landmarks_list[0]['chin']
-        left_eye = face_landmarks_list[0]['left_eye']
-        right_eye = face_landmarks_list[0]['right_eye']
+        landmarks = face_landmarks_list[0]
+        left_eye = np.mean(landmarks['left_eye'], axis=0)
+        right_eye = np.mean(landmarks['right_eye'], axis=0)
 
-        # Align based on the position of the eyes
-        # Implement your own logic here to rotate or align the face
-        # You can calculate the eye center and align the face horizontally
-        pass
+        # Calculate angle to align eyes horizontally
+        dY = right_eye[1] - left_eye[1]
+        dX = right_eye[0] - left_eye[0]
+        angle = np.degrees(np.arctan2(dY, dX))
 
-    # Return the aligned face (for now returning the same image)
-    return image
+        # Get the center of the image
+        (h, w) = image.shape[:2]
+        center = (w // 2, h // 2)
+
+        # Rotate the image to align the eyes
+        M = cv2.getRotationMatrix2D(center, angle, 1.0)
+        aligned_image = cv2.warpAffine(image, M, (w, h), flags=cv2.INTER_CUBIC)
+
+        return aligned_image
+
+    return image  # Return original image if no face landmarks found
 
 
-def compare_faces(known_face_encodings, face_encoding):
+def compare_faces(known_face_encodings, face_encoding, tolerance=0.6):
     """
     Compares a face encoding against a list of known face encodings.
+    Returns a list of boolean values indicating which known faces match the given face.
     """
-    return face_recognition.compare_faces(known_face_encodings, face_encoding)
+    return face_recognition.compare_faces(known_face_encodings, face_encoding, tolerance=tolerance)
+
+
+def face_distance(known_face_encodings, face_encoding):
+    """
+    Computes the face distance between the target face encoding and a list of known face encodings.
+    """
+    return face_recognition.face_distance(known_face_encodings, face_encoding)
