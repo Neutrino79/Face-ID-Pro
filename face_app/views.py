@@ -9,12 +9,12 @@ import cv2
 import face_recognition
 import math
 
-# Set up logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 THRESHOLD = 0.6
 REQUIRED_SAMPLES = 5
+MAX_ATTEMPTS = 3  # Maximum number of attempts for each pose
 
 POSES = [
     {'instruction': 'Look straight at the camera', 'validation': 'validate_front_face'},
@@ -24,13 +24,19 @@ POSES = [
     {'instruction': 'Tilt your head down slightly', 'validation': 'validate_down_face'}
 ]
 
+
 def home(request):
     return render(request, 'home.html')
 
 def get_next_pose(request):
     sample_count = int(request.GET.get('sample_count', 0))
+    attempt_count = int(request.GET.get('attempt_count', 0))
+
+    if attempt_count >= MAX_ATTEMPTS:
+        return JsonResponse({'success': False, 'error': 'Maximum attempts reached. Please start over.', 'reset': True})
+
     if sample_count < len(POSES):
-        return JsonResponse({'instruction': POSES[sample_count]['instruction']})
+        return JsonResponse({'instruction': POSES[sample_count]['instruction'], 'attempt_count': attempt_count})
     else:
         return JsonResponse({'complete': True})
 
@@ -44,7 +50,7 @@ def validate_front_face(landmarks):
     right_eye = np.mean(landmarks['right_eye'], axis=0)
     eye_angle = math.degrees(math.atan2(right_eye[1] - left_eye[1], right_eye[0] - left_eye[0]))
     logger.debug(f"Front face eye angle: {eye_angle}")
-    return abs(eye_angle) < 10
+    return abs(eye_angle) < 15  # Increased tolerance
 
 def calculate_face_ratio(landmarks):
     left_eye = np.mean(landmarks['left_eye'], axis=0)
@@ -58,15 +64,13 @@ def calculate_face_ratio(landmarks):
 
 def validate_left_face(landmarks):
     left_ratio, right_ratio = calculate_face_ratio(landmarks)
-    # Adjusted condition for left face turn
-    is_valid = left_ratio > 0.35 and right_ratio < 0.65
+    is_valid = left_ratio > 0.30 and right_ratio < 0.70  # Adjusted thresholds
     logger.debug(f"Left face validation result: {is_valid}")
     return is_valid
 
 def validate_right_face(landmarks):
     left_ratio, right_ratio = calculate_face_ratio(landmarks)
-    # Further adjusted condition for right face turn
-    is_valid = left_ratio < 0.25 and right_ratio > 0.75
+    is_valid = left_ratio < 0.30 and right_ratio > 0.70  # Adjusted thresholds
     logger.debug(f"Right face validation result: {is_valid}")
     return is_valid
 
@@ -76,7 +80,7 @@ def validate_up_face(landmarks):
     mouth = np.mean(landmarks['top_lip'], axis=0)
     eye_mouth_distance = np.linalg.norm(np.mean([left_eye, right_eye], axis=0) - mouth)
     logger.debug(f"Up face eye-mouth distance: {eye_mouth_distance}")
-    return eye_mouth_distance < 50
+    return eye_mouth_distance < 55  # Increased threshold
 
 def validate_down_face(landmarks):
     left_eye = np.mean(landmarks['left_eye'], axis=0)
@@ -84,12 +88,13 @@ def validate_down_face(landmarks):
     mouth = np.mean(landmarks['top_lip'], axis=0)
     eye_mouth_distance = np.linalg.norm(np.mean([left_eye, right_eye], axis=0) - mouth)
     logger.debug(f"Down face eye-mouth distance: {eye_mouth_distance}")
-    return eye_mouth_distance > 52 and eye_mouth_distance < 60
+    return eye_mouth_distance > 50 and eye_mouth_distance < 62  # Adjusted range
 
 def register_face(request):
     if request.method == 'POST':
         image_data = request.POST.get('image')
         sample_count = int(request.POST.get('sample_count', 0))
+        attempt_count = int(request.POST.get('attempt_count', 0))
 
         if not image_data:
             return JsonResponse({'success': False, 'error': 'Image is required.'})
@@ -102,26 +107,19 @@ def register_face(request):
 
             # Pre-check if the image is too blurry
             if is_blurry(image):
-                return JsonResponse({'success': False, 'error': 'Image is too blurry. Please try again.'})
+                return JsonResponse({'success': False, 'error': 'Image is too blurry. Please try again.', 'attempt_count': attempt_count + 1})
 
             # Detect face landmarks
             face_landmarks_list = face_recognition.face_landmarks(image)
             if not face_landmarks_list:
-                return JsonResponse({'success': False, 'error': 'No face detected in the image. Please try again.'})
+                return JsonResponse({'success': False, 'error': 'No face detected in the image. Please try again.', 'attempt_count': attempt_count + 1})
 
             # Validate face angle
             validation_result = validate_face_angle(image, face_landmarks_list[0], POSES[sample_count]['validation'])
             if not validation_result:
                 instruction = POSES[sample_count]["instruction"].lower()
-                if 'right' in instruction:
-                    return JsonResponse({'success': False,
-                                         'error': f'Please turn your head further to the right until your right ear is visible.'})
-                elif 'left' in instruction:
-                    return JsonResponse({'success': False,
-                                         'error': f'Please turn your head further to the left until your left ear is visible.'})
-                else:
-                    return JsonResponse({'success': False,
-                                         'error': f'Face not in correct position. Please {instruction}.'})
+                error_message = f'Face not in correct position. Please {instruction}.'
+                return JsonResponse({'success': False, 'error': error_message, 'attempt_count': attempt_count + 1})
 
             # Align the face for more accurate encoding
             image = align_face(image)
@@ -134,17 +132,15 @@ def register_face(request):
 
                 sample_count += 1
                 if sample_count >= REQUIRED_SAMPLES:
-                    return JsonResponse({'success': True, 'message': 'Face samples collected. Please enter your name.',
-                                         'complete': True})
+                    return JsonResponse({'success': True, 'message': 'Face samples collected. Please enter your name.', 'complete': True})
                 else:
-                    return JsonResponse(
-                        {'success': True, 'message': f'Sample {sample_count} of {REQUIRED_SAMPLES} captured.',
-                         'complete': False, 'sample_count': sample_count})
+                    return JsonResponse({'success': True, 'message': f'Sample {sample_count} of {REQUIRED_SAMPLES} captured.', 'complete': False, 'sample_count': sample_count, 'attempt_count': 0})
             else:
-                return JsonResponse({'success': False, 'error': 'Failed to encode face. Please try again.'})
+                return JsonResponse({'success': False, 'error': 'Failed to encode face. Please try again.', 'attempt_count': attempt_count + 1})
+
         except Exception as e:
             logger.exception("An error occurred during face registration")
-            return JsonResponse({'success': False, 'error': f'An error occurred: {str(e)}'})
+            return JsonResponse({'success': False, 'error': f'An error occurred: {str(e)}', 'attempt_count': attempt_count + 1})
 
     return render(request, 'register_face.html')
 
