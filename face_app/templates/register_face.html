@@ -9,13 +9,7 @@
 
             <div class="card">
                 <div class="card-body">
-                    <form id="registerForm">
-                        {% csrf_token %}
-                        <div class="mb-4">
-                            <label for="name" class="form-label">Name</label>
-                            <input type="text" class="form-control" id="name" name="name" required>
-                        </div>
-
+                    <div id="captureSection">
                         <div class="mb-4">
                             <label class="form-label">Face Image</label>
                             <div class="text-center">
@@ -37,7 +31,20 @@
                                 <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
                             </div>
                         </div>
-                    </form>
+                    </div>
+
+                    <div id="nameSection" style="display:none;">
+                        <form id="nameForm">
+                            {% csrf_token %}
+                            <div class="mb-4">
+                                <label for="name" class="form-label">Name</label>
+                                <input type="text" class="form-control" id="name" name="name" required>
+                            </div>
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary">Save Face Profile</button>
+                            </div>
+                        </form>
+                    </div>
 
                     <div id="result" class="mt-4 alert" style="display:none;"></div>
                 </div>
@@ -57,15 +64,11 @@
     let progress = document.getElementById('progress');
     let progressBar = document.getElementById('progressBar');
     let result = document.getElementById('result');
+    let captureSection = document.getElementById('captureSection');
+    let nameSection = document.getElementById('nameSection');
+    let nameForm = document.getElementById('nameForm');
     let sampleCount = 0;
     const requiredSamples = 5;
-    const poses = [
-        'Look straight at the camera',
-        'Turn your head slightly to the left',
-        'Turn your head slightly to the right',
-        'Tilt your head up slightly',
-        'Tilt your head down slightly'
-    ];
     let isCapturing = false;
 
     navigator.mediaDevices.getUserMedia({ video: true })
@@ -77,6 +80,7 @@
         });
 
     startBtn.addEventListener('click', startCapture);
+    nameForm.addEventListener('submit', saveFaceProfile);
 
     function startCapture() {
         if (isCapturing) return;
@@ -89,21 +93,31 @@
 
     function captureLoop() {
         if (sampleCount >= requiredSamples) {
-            finishRegistration();
+            finishCapture();
             return;
         }
 
-        updateInstructions();
-        updateProgress();
-
-        // Wait for 3 seconds before capturing to give user time to adjust
-        setTimeout(() => {
-            captureAndSendImage();
-        }, 3000);
+        fetch(`/get_next_pose/?sample_count=${sampleCount}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.complete) {
+                    finishCapture();
+                } else {
+                    updateInstructions(data.instruction);
+                    updateProgress();
+                    setTimeout(captureAndSendImage, 3000);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showError('An error occurred. Please try again.');
+                isCapturing = false;
+                startBtn.style.display = 'block';
+            });
     }
 
-    function updateInstructions() {
-        instructions.textContent = poses[sampleCount % poses.length];
+    function updateInstructions(instruction) {
+        instructions.textContent = instruction;
     }
 
     function captureAndSendImage() {
@@ -116,7 +130,6 @@
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
             },
             body: new URLSearchParams({
-                'name': document.getElementById('name').value,
                 'image': imageData,
                 'sample_count': sampleCount
             })
@@ -126,14 +139,14 @@
             if (data.success) {
                 sampleCount++;
                 if (data.complete) {
-                    finishRegistration();
+                    finishCapture();
                 } else {
                     captureLoop();
                 }
             } else {
                 showError(data.error);
                 // Retry the same pose
-                setTimeout(captureAndSendImage, 2000);
+                setTimeout(captureLoop, 2000);
             }
         })
         .catch(error => {
@@ -150,20 +163,49 @@
         progressBar.textContent = Math.round(percentage) + '%';
     }
 
-    function finishRegistration() {
+    function finishCapture() {
         isCapturing = false;
-        video.srcObject.getTracks().forEach(track => track.stop());
-        instructions.style.display = 'none';
-        progress.style.display = 'none';
-        result.textContent = 'Face registration complete!';
-        result.className = 'mt-4 alert alert-success';
+        captureSection.style.display = 'none';
+        nameSection.style.display = 'block';
+        showMessage('Face samples collected. Please enter your name.', 'alert-success');
+    }
+
+    function saveFaceProfile(event) {
+        event.preventDefault();
+        let name = document.getElementById('name').value;
+
+        fetch('/save_face_profile/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            },
+            body: new URLSearchParams({
+                'name': name
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showMessage(data.message, 'alert-success');
+                nameSection.style.display = 'none';
+            } else {
+                showError(data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showError('An error occurred. Please try again.');
+        });
+    }
+
+    function showMessage(message, className) {
+        result.textContent = message;
+        result.className = `mt-4 alert ${className}`;
         result.style.display = 'block';
     }
 
     function showError(message) {
-        result.textContent = message;
-        result.className = 'mt-4 alert alert-danger';
-        result.style.display = 'block';
+        showMessage(message, 'alert-danger');
     }
 </script>
 {% endblock %}

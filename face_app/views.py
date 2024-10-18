@@ -1,3 +1,4 @@
+import logging
 from django.shortcuts import render
 from django.http import JsonResponse
 from .models import FaceProfile
@@ -6,21 +7,92 @@ import base64
 import numpy as np
 import cv2
 import face_recognition
+import math
+
+# Set up logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 THRESHOLD = 0.6
 REQUIRED_SAMPLES = 5
 
+POSES = [
+    {'instruction': 'Look straight at the camera', 'validation': 'validate_front_face'},
+    {'instruction': 'Turn your head slightly to the left', 'validation': 'validate_left_face'},
+    {'instruction': 'Turn your head slightly to the right', 'validation': 'validate_right_face'},
+    {'instruction': 'Tilt your head up slightly', 'validation': 'validate_up_face'},
+    {'instruction': 'Tilt your head down slightly', 'validation': 'validate_down_face'}
+]
+
 def home(request):
     return render(request, 'home.html')
 
+def get_next_pose(request):
+    sample_count = int(request.GET.get('sample_count', 0))
+    if sample_count < len(POSES):
+        return JsonResponse({'instruction': POSES[sample_count]['instruction']})
+    else:
+        return JsonResponse({'complete': True})
+
+def validate_face_angle(image, landmarks, validation_func):
+    result = globals()[validation_func](landmarks)
+    logger.debug(f"Validation result for {validation_func}: {result}")
+    return result
+
+def validate_front_face(landmarks):
+    left_eye = np.mean(landmarks['left_eye'], axis=0)
+    right_eye = np.mean(landmarks['right_eye'], axis=0)
+    eye_angle = math.degrees(math.atan2(right_eye[1] - left_eye[1], right_eye[0] - left_eye[0]))
+    logger.debug(f"Front face eye angle: {eye_angle}")
+    return abs(eye_angle) < 10
+
+def calculate_face_ratio(landmarks):
+    left_eye = np.mean(landmarks['left_eye'], axis=0)
+    right_eye = np.mean(landmarks['right_eye'], axis=0)
+    nose_tip = landmarks['nose_tip'][0]
+    left_ratio = (nose_tip[0] - left_eye[0]) / (right_eye[0] - left_eye[0])
+    right_ratio = (right_eye[0] - nose_tip[0]) / (right_eye[0] - left_eye[0])
+    logger.debug(f"Left eye: {left_eye}, Right eye: {right_eye}, Nose tip: {nose_tip}")
+    logger.debug(f"Left ratio: {left_ratio}, Right ratio: {right_ratio}")
+    return left_ratio, right_ratio
+
+def validate_left_face(landmarks):
+    left_ratio, right_ratio = calculate_face_ratio(landmarks)
+    # Adjusted condition for left face turn
+    is_valid = left_ratio > 0.35 and right_ratio < 0.65
+    logger.debug(f"Left face validation result: {is_valid}")
+    return is_valid
+
+def validate_right_face(landmarks):
+    left_ratio, right_ratio = calculate_face_ratio(landmarks)
+    # Further adjusted condition for right face turn
+    is_valid = left_ratio < 0.25 and right_ratio > 0.75
+    logger.debug(f"Right face validation result: {is_valid}")
+    return is_valid
+
+def validate_up_face(landmarks):
+    left_eye = np.mean(landmarks['left_eye'], axis=0)
+    right_eye = np.mean(landmarks['right_eye'], axis=0)
+    mouth = np.mean(landmarks['top_lip'], axis=0)
+    eye_mouth_distance = np.linalg.norm(np.mean([left_eye, right_eye], axis=0) - mouth)
+    logger.debug(f"Up face eye-mouth distance: {eye_mouth_distance}")
+    return eye_mouth_distance < 50
+
+def validate_down_face(landmarks):
+    left_eye = np.mean(landmarks['left_eye'], axis=0)
+    right_eye = np.mean(landmarks['right_eye'], axis=0)
+    mouth = np.mean(landmarks['top_lip'], axis=0)
+    eye_mouth_distance = np.linalg.norm(np.mean([left_eye, right_eye], axis=0) - mouth)
+    logger.debug(f"Down face eye-mouth distance: {eye_mouth_distance}")
+    return eye_mouth_distance > 52 and eye_mouth_distance < 60
+
 def register_face(request):
     if request.method == 'POST':
-        name = request.POST.get('name')
         image_data = request.POST.get('image')
         sample_count = int(request.POST.get('sample_count', 0))
 
-        if not name or not image_data:
-            return JsonResponse({'success': False, 'error': 'Name and image are required.'})
+        if not image_data:
+            return JsonResponse({'success': False, 'error': 'Image is required.'})
 
         try:
             # Decode the base64 image
@@ -32,37 +104,71 @@ def register_face(request):
             if is_blurry(image):
                 return JsonResponse({'success': False, 'error': 'Image is too blurry. Please try again.'})
 
+            # Detect face landmarks
+            face_landmarks_list = face_recognition.face_landmarks(image)
+            if not face_landmarks_list:
+                return JsonResponse({'success': False, 'error': 'No face detected in the image. Please try again.'})
+
+            # Validate face angle
+            validation_result = validate_face_angle(image, face_landmarks_list[0], POSES[sample_count]['validation'])
+            if not validation_result:
+                instruction = POSES[sample_count]["instruction"].lower()
+                if 'right' in instruction:
+                    return JsonResponse({'success': False,
+                                         'error': f'Please turn your head further to the right until your right ear is visible.'})
+                elif 'left' in instruction:
+                    return JsonResponse({'success': False,
+                                         'error': f'Please turn your head further to the left until your left ear is visible.'})
+                else:
+                    return JsonResponse({'success': False,
+                                         'error': f'Face not in correct position. Please {instruction}.'})
+
             # Align the face for more accurate encoding
             image = align_face(image)
 
             # Detect and encode face using CNN model
             success, face_encoding = detect_and_encode_face(image, use_cnn=True)
             if success:
-                if sample_count == 0:
-                    # First sample, create new FaceProfile
-                    face_profile = FaceProfile(name=name)
-                    face_profile.set_encodings([face_encoding])
-                    face_profile.save()
-                else:
-                    # Update existing FaceProfile
-                    face_profile = FaceProfile.objects.get(name=name)
-                    current_encodings = face_profile.get_encodings()
-                    updated_encodings = np.vstack((current_encodings, [face_encoding]))
-                    face_profile.set_encodings(updated_encodings)
-                    face_profile.save()
+                # Store the encoding in the session
+                request.session.setdefault('face_encodings', []).append(face_encoding.tolist())
 
                 sample_count += 1
                 if sample_count >= REQUIRED_SAMPLES:
-                    return JsonResponse({'success': True, 'message': 'Face registration complete.', 'complete': True})
+                    return JsonResponse({'success': True, 'message': 'Face samples collected. Please enter your name.',
+                                         'complete': True})
                 else:
-                    return JsonResponse({'success': True, 'message': f'Sample {sample_count} of {REQUIRED_SAMPLES} captured.', 'complete': False, 'sample_count': sample_count})
+                    return JsonResponse(
+                        {'success': True, 'message': f'Sample {sample_count} of {REQUIRED_SAMPLES} captured.',
+                         'complete': False, 'sample_count': sample_count})
             else:
-                return JsonResponse({'success': False, 'error': 'No face detected in the image. Please try again.'})
+                return JsonResponse({'success': False, 'error': 'Failed to encode face. Please try again.'})
         except Exception as e:
+            logger.exception("An error occurred during face registration")
             return JsonResponse({'success': False, 'error': f'An error occurred: {str(e)}'})
 
     return render(request, 'register_face.html')
 
+def save_face_profile(request):
+    if request.method == 'POST':
+        name = request.POST.get('name')
+        face_encodings = request.session.get('face_encodings', [])
+
+        if not name or not face_encodings:
+            return JsonResponse({'success': False, 'error': 'Name and face encodings are required.'})
+
+        try:
+            face_profile = FaceProfile(name=name)
+            face_profile.set_encodings(np.array(face_encodings))
+            face_profile.save()
+
+            # Clear the session data
+            del request.session['face_encodings']
+
+            return JsonResponse({'success': True, 'message': 'Face profile saved successfully.'})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': f'An error occurred: {str(e)}'})
+
+    return JsonResponse({'success': False, 'error': 'Invalid request method.'})
 
 def test_face(request):
     if request.method == 'POST':
