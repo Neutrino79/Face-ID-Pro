@@ -4,7 +4,7 @@ import numpy as np
 from PIL import Image
 
 
-def detect_and_encode_face(image, use_cnn=False):
+def detect_and_encode_face(image, use_cnn=True):
     """
     Detects a face in the image and returns the face encoding.
     If `use_cnn` is True, it uses the CNN model for detection.
